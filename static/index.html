@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Smart Journal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Literata:opsz,wght@7..72,400;7..72,600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.4.38/dist/vue.global.prod.js"></script>
+  <style>
+    :root {
+      --paper: #f5f6f8;
+      --page: #ffffff;
+      --ink: #1e2740;
+      --muted: #5d667a;
+      --line: #dce0e8;
+      --marker: #f3d44b;
+      --danger: #b3412f;
+      --serif: "Literata", Georgia, "Times New Roman", serif;
+      --sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #161a23;
+        --page: #1e2330;
+        --ink: #e8eaf0;
+        --muted: #9aa2b5;
+        --line: #2e3445;
+        --marker: #8c7520;
+        --danger: #e07a66;
+        color-scheme: dark;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    [v-cloak] { display: none; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font: 16px/1.5 var(--sans);
+    }
+    button, input, textarea, select { font: inherit; color: inherit; }
+    :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+    /* The one bold idea: a highlighter stroke marks what matters (selection, day headings). */
+    .marked {
+      background: linear-gradient(transparent 58%, var(--marker) 58%, var(--marker) 92%, transparent 92%);
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--line);
+      background: var(--page);
+    }
+    header h1 { margin: 0; font: 600 1.35rem/1.2 var(--serif); }
+    nav { display: flex; gap: .25rem; }
+    nav button {
+      border: 0;
+      background: none;
+      padding: .4rem .8rem;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--muted);
+    }
+    nav button[aria-pressed="true"] { color: var(--ink); font-weight: 600; }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(260px, 340px) 1fr;
+      min-height: calc(100vh - 66px);
+    }
+    aside {
+      border-right: 1px solid var(--line);
+      padding: 1.25rem;
+      overflow-y: auto;
+    }
+    section.workspace {
+      padding: 2rem clamp(1.25rem, 4vw, 3.5rem);
+      max-width: 860px;
+      width: 100%;
+    }
+
+    .btn {
+      border: 1px solid var(--ink);
+      background: var(--ink);
+      color: var(--page);
+      border-radius: 6px;
+      padding: .5rem 1rem;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .btn.quiet { background: transparent; color: var(--ink); border-color: var(--line); }
+    .btn.danger { background: transparent; color: var(--danger); border-color: transparent; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    .search {
+      width: 100%;
+      padding: .5rem .75rem;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--page);
+      margin: .75rem 0 1rem;
+    }
+
+    .entry-list { list-style: none; margin: 0; padding: 0; }
+    .entry-list button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      border: 0;
+      background: none;
+      padding: .7rem .5rem;
+      border-bottom: 1px solid var(--line);
+      cursor: pointer;
+    }
+    .entry-list .date { font-size: .8rem; color: var(--muted); }
+    .entry-list .title { display: inline; font: 600 1rem/1.4 var(--serif); }
+    .entry-list .preview {
+      display: block;
+      font-size: .875rem;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .empty { color: var(--muted); font-size: .95rem; }
+
+    .title-input {
+      width: 100%;
+      border: 0;
+      background: none;
+      font: 600 clamp(1.6rem, 3vw, 2.1rem)/1.2 var(--serif);
+      padding: 0;
+      margin-bottom: .75rem;
+    }
+    .title-input:focus-visible, .body-input:focus-visible { outline: none; }
+    .body-input {
+      width: 100%;
+      min-height: 50vh;
+      border: 0;
+      background: none;
+      resize: vertical;
+      font: 400 1.1rem/1.8 var(--serif);
+      max-width: 68ch;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: .75rem;
+      margin-bottom: 1.5rem;
+      color: var(--muted);
+      font-size: .9rem;
+    }
+    .toolbar .spacer { flex: 1; }
+    select {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--page);
+      padding: .35rem .5rem;
+    }
+
+    .notice { font-size: .9rem; color: var(--muted); min-height: 1.4em; }
+    .error { color: var(--danger); font-size: .9rem; }
+
+    /* Planner */
+    label.field { display: block; font-weight: 600; margin: 1.25rem 0 .4rem; }
+    .hint { font-weight: 400; color: var(--muted); font-size: .875rem; }
+    .scope { display: flex; gap: .5rem; }
+    .scope button {
+      flex: 1;
+      border: 1px solid var(--line);
+      background: var(--page);
+      border-radius: 6px;
+      padding: .5rem;
+      cursor: pointer;
+    }
+    .scope button[aria-pressed="true"] { border-color: var(--ink); font-weight: 600; }
+    textarea.ideas {
+      width: 100%;
+      min-height: 120px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--page);
+      padding: .6rem .75rem;
+      resize: vertical;
+    }
+    .suggest { margin-top: .6rem; }
+    .suggestion {
+      margin-top: .75rem;
+      padding: .75rem .9rem;
+      border: 1px dashed var(--line);
+      border-radius: 6px;
+      background: var(--page);
+    }
+    .suggestion p { margin: 0 0 .15rem; font: 400 1.05rem/1.5 var(--serif); }
+    .suggestion .category { font-size: .8rem; color: var(--muted); }
+    .suggestion .actions { display: flex; gap: .5rem; margin-top: .6rem; }
+    .btn.small { padding: .3rem .7rem; font-size: .875rem; }
+    .pick-list { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow-y: auto; }
+    .pick-list label {
+      display: flex;
+      gap: .6rem;
+      align-items: baseline;
+      padding: .35rem 0;
+      cursor: pointer;
+      font-size: .95rem;
+    }
+    .pick-list .date { color: var(--muted); font-size: .8rem; margin-left: auto; white-space: nowrap; }
+
+    .plan-summary { font: 400 1.15rem/1.7 var(--serif); max-width: 62ch; margin: 0 0 2rem; }
+    .days {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 2rem 1.75rem;
+    }
+    .day h3 { margin: 0; font: 600 1.15rem/1.3 var(--serif); }
+    .day .focus { color: var(--muted); font-size: .9rem; margin: .2rem 0 .6rem; }
+    .day ul { margin: 0; padding-left: 1.1rem; }
+    .day li { margin-bottom: .3rem; }
+    .tips { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--line); }
+    .tips h3 { margin: 0 0 .5rem; font-size: 1rem; }
+    .past { margin-top: 2rem; }
+    .past h2 { font-size: 1rem; margin: 0 0 .5rem; }
+    .past button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: 0;
+      padding: .4rem 0;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: .9rem;
+    }
+    .past button[aria-current="true"] { color: var(--ink); font-weight: 600; }
+
+    @media (max-width: 760px) {
+      main { grid-template-columns: 1fr; }
+      aside { border-right: 0; border-bottom: 1px solid var(--line); max-height: 45vh; }
+      .body-input { min-height: 40vh; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+<div id="app" v-cloak>
+  <header>
+    <h1>Smart Journal</h1>
+    <nav aria-label="Sections">
+      <button :aria-pressed="tab === 'journal'" @click="tab = 'journal'">
+        <span :class="{ marked: tab === 'journal' }">Journal</span>
+      </button>
+      <button :aria-pressed="tab === 'plan'" @click="openPlanner">
+        <span :class="{ marked: tab === 'plan' }">Plan</span>
+      </button>
+    </nav>
+  </header>
+
+  <!-- Journal -->
+  <main v-if="tab === 'journal'">
+    <aside>
+      <button class="btn" @click="newEntry">New entry</button>
+      <input class="search" type="search" v-model="search" placeholder="Search entries" aria-label="Search entries">
+      <p v-if="!entries.length" class="empty">
+        {{ search ? 'No entries match that search.' : 'No entries yet. Write your first one on the right.' }}
+      </p>
+      <ul class="entry-list">
+        <li v-for="entry in entries" :key="entry.id">
+          <button @click="selectEntry(entry)" :aria-current="entry.id === draft.id">
+            <span class="date">{{ formatDate(entry.created_at) }}</span><br>
+            <span class="title" :class="{ marked: entry.id === draft.id }">{{ entry.title }}</span>
+            <span class="preview">{{ entry.body }}</span>
+          </button>
+        </li>
+      </ul>
+    </aside>
+
+    <section class="workspace">
+      <div class="toolbar">
+        <span>{{ draft.id ? 'Written ' + formatDate(draft.created_at) : 'New entry' }}</span>
+        <label>Mood
+          <select v-model="draft.mood">
+            <option :value="null">Not set</option>
+            <option v-for="mood in moods" :key="mood" :value="mood">{{ mood }}</option>
+          </select>
+        </label>
+        <span class="spacer"></span>
+        <button v-if="draft.id" class="btn danger" @click="deleteEntry">Delete</button>
+        <button class="btn" :disabled="saving || !canSave" @click="saveEntry">
+          {{ saving ? 'Saving…' : 'Save entry' }}
+        </button>
+      </div>
+      <input class="title-input" v-model="draft.title" placeholder="Title" aria-label="Entry title" maxlength="200">
+      <textarea class="body-input" v-model="draft.body" placeholder="What happened today?" aria-label="Entry text"></textarea>
+      <p class="notice" aria-live="polite">{{ notice }}</p>
+      <p v-if="error" class="error" role="alert">{{ error }}</p>
+    </section>
+  </main>
+
+  <!-- Planner -->
+  <main v-else>
+    <aside>
+      <label class="field">Plan for</label>
+      <div class="scope">
+        <button :aria-pressed="scope === 'week'" @click="scope = 'week'">This week</button>
+        <button :aria-pressed="scope === 'weekend'" @click="scope = 'weekend'">This weekend</button>
+      </div>
+
+      <label class="field" for="ideas">Ideas <span class="hint">anything you want to fit in</span></label>
+      <textarea id="ideas" class="ideas" v-model="ideas" maxlength="4000"
+        placeholder="Finish AWS practice exam, climbing on Saturday, call Mum"></textarea>
+
+      <div class="suggest">
+        <button class="btn quiet small" :disabled="suggesting" @click="suggest">
+          {{ suggestion ? 'Suggest something else' : 'Suggest something to do' }}
+        </button>
+        <div class="suggestion" v-if="suggestion" aria-live="polite">
+          <p>{{ suggestion.text }}</p>
+          <span class="category">{{ suggestion.category }}</span>
+          <div class="actions">
+            <button class="btn small" @click="addSuggestion">Add to ideas</button>
+            <button class="btn quiet small" @click="suggestion = null">Dismiss</button>
+          </div>
+        </div>
+      </div>
+
+      <label class="field">Use journal entries <span class="hint">optional, up to 20</span></label>
+      <p v-if="!recentEntries.length" class="empty">Your entries will show up here once you write some.</p>
+      <ul class="pick-list">
+        <li v-for="entry in recentEntries" :key="entry.id">
+          <label>
+            <input type="checkbox" :value="entry.id" v-model="chosenIds" :disabled="!chosenIds.includes(entry.id) && chosenIds.length >= 20">
+            <span>{{ entry.title }}</span>
+            <span class="date">{{ formatDate(entry.created_at) }}</span>
+          </label>
+        </li>
+      </ul>
+
+      <p style="margin-top: 1.25rem">
+        <button class="btn" :disabled="planning || (!ideas.trim() && !chosenIds.length)" @click="makePlan">
+          {{ planning ? 'Making your plan…' : 'Make my plan' }}
+        </button>
+      </p>
+      <p v-if="planError" class="error" role="alert">{{ planError }}</p>
+
+      <div class="past" v-if="plans.length">
+        <h2>Earlier plans</h2>
+        <button v-for="p in plans" :key="p.id" :aria-current="plan && plan.id === p.id" @click="plan = p">
+          {{ p.scope === 'week' ? 'Week' : 'Weekend' }} plan, {{ formatDate(p.created_at) }}
+        </button>
+      </div>
+    </aside>
+
+    <section class="workspace" aria-live="polite">
+      <p v-if="!plan" class="empty">Add some ideas or pick a few entries, then make a plan.</p>
+      <template v-else>
+        <p class="plan-summary">{{ plan.content.summary }}</p>
+        <div class="days">
+          <article class="day" v-for="day in plan.content.days" :key="day.day">
+            <h3><span class="marked">{{ day.day }}</span></h3>
+            <p class="focus">{{ day.focus }}</p>
+            <ul>
+              <li v-for="(task, i) in day.tasks" :key="i">{{ task }}</li>
+            </ul>
+          </article>
+        </div>
+        <div class="tips" v-if="plan.content.tips.length">
+          <h3>Worth keeping in mind</h3>
+          <ul>
+            <li v-for="(tip, i) in plan.content.tips" :key="i">{{ tip }}</li>
+          </ul>
+        </div>
+      </template>
+    </section>
+  </main>
+</div>
+
+<script>
+  const { createApp, ref, reactive, computed, watch, onMounted } = Vue;
+
+  async function api(path, options = {}) {
+    const response = await fetch(path, {
+      headers: { 'Content-Type': 'application/json' },
+      ...options,
+    });
+    if (response.status === 204) return null;
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      const detail = data && data.detail;
+      const message = typeof detail === 'string'
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map(d => d.msg.replace(/^Value error, /, '')).join('; ')
+          : `Request failed with status ${response.status}`;
+      throw new Error(message);
+    }
+    return data;
+  }
+
+  const blankDraft = () => ({ id: null, title: '', body: '', mood: null, created_at: null });
+
+  createApp({
+    setup() {
+      const tab = ref('journal');
+      const moods = ['great', 'good', 'okay', 'low', 'rough'];
+
+      // Journal state
+      const entries = ref([]);
+      const search = ref('');
+      const draft = reactive(blankDraft());
+      const saving = ref(false);
+      const notice = ref('');
+      const error = ref('');
+      const canSave = computed(() => draft.title.trim() && draft.body.trim());
+
+      // Planner state
+      const scope = ref('week');
+      const ideas = ref('');
+      const chosenIds = ref([]);
+      const recentEntries = ref([]);
+      const planning = ref(false);
+      const planError = ref('');
+      const plan = ref(null);
+      const plans = ref([]);
+      const suggestion = ref(null);
+      const suggesting = ref(false);
+
+      const formatDate = iso => iso
+        ? new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+        : '';
+
+      async function loadEntries() {
+        try {
+          const query = search.value.trim() ? `?q=${encodeURIComponent(search.value.trim())}` : '';
+          entries.value = await api(`/api/entries${query}`);
+        } catch (e) {
+          error.value = e.message;
+        }
+      }
+
+      let searchTimer;
+      watch(search, () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(loadEntries, 250);
+      });
+
+      function newEntry() {
+        Object.assign(draft, blankDraft());
+        notice.value = '';
+        error.value = '';
+      }
+
+      function selectEntry(entry) {
+        Object.assign(draft, entry);
+        notice.value = '';
+        error.value = '';
+      }
+
+      async function saveEntry() {
+        saving.value = true;
+        error.value = '';
+        const payload = { title: draft.title.trim(), body: draft.body, mood: draft.mood };
+        try {
+          const saved = draft.id
+            ? await api(`/api/entries/${draft.id}`, { method: 'PATCH', body: JSON.stringify(payload) })
+            : await api('/api/entries', { method: 'POST', body: JSON.stringify(payload) });
+          Object.assign(draft, saved);
+          notice.value = 'Entry saved.';
+          await loadEntries();
+        } catch (e) {
+          error.value = e.message;
+        } finally {
+          saving.value = false;
+        }
+      }
+
+      async function deleteEntry() {
+        if (!confirm(`Delete "${draft.title}"? This can't be undone.`)) return;
+        try {
+          await api(`/api/entries/${draft.id}`, { method: 'DELETE' });
+          newEntry();
+          notice.value = 'Entry deleted.';
+          await loadEntries();
+        } catch (e) {
+          error.value = e.message;
+        }
+      }
+
+      async function openPlanner() {
+        tab.value = 'plan';
+        try {
+          const [latestEntries, latestPlans] = await Promise.all([
+            api('/api/entries?limit=30'),
+            api('/api/plans'),
+          ]);
+          recentEntries.value = latestEntries;
+          plans.value = latestPlans;
+          const known = new Set(latestEntries.map(e => e.id));
+          chosenIds.value = chosenIds.value.filter(id => known.has(id));
+          if (!plan.value && latestPlans.length) plan.value = latestPlans[0];
+        } catch (e) {
+          planError.value = e.message;
+        }
+      }
+
+      async function makePlan() {
+        planning.value = true;
+        planError.value = '';
+        try {
+          const created = await api('/api/plans', {
+            method: 'POST',
+            body: JSON.stringify({ scope: scope.value, ideas: ideas.value, entry_ids: chosenIds.value }),
+          });
+          plan.value = created;
+          plans.value = [created, ...plans.value].slice(0, 10);
+        } catch (e) {
+          planError.value = e.message;
+        } finally {
+          planning.value = false;
+        }
+      }
+
+      async function suggest() {
+        suggesting.value = true;
+        planError.value = '';
+        try {
+          const exclude = suggestion.value ? `?exclude=${encodeURIComponent(suggestion.value.text)}` : '';
+          suggestion.value = await api(`/api/suggestions/random${exclude}`);
+        } catch (e) {
+          planError.value = e.message;
+        } finally {
+          suggesting.value = false;
+        }
+      }
+
+      function addSuggestion() {
+        const current = ideas.value.trim();
+        ideas.value = current ? `${current}, ${suggestion.value.text}` : suggestion.value.text;
+        suggestion.value = null;
+      }
+
+      onMounted(loadEntries);
+
+      return {
+        tab, moods, entries, search, draft, saving, notice, error, canSave,
+        scope, ideas, chosenIds, recentEntries, planning, planError, plan, plans, suggestion, suggesting,
+        formatDate, newEntry, selectEntry, saveEntry, deleteEntry, openPlanner, makePlan, suggest, addSuggestion,
+      };
+    },
+  }).mount('#app');
+</script>
+</body>
+</html>
