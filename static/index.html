@@ -6,348 +6,476 @@
   <title>Smart Journal</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Literata:opsz,wght@7..72,400;7..72,600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/vue@3.4.38/dist/vue.global.prod.js"></script>
   <style>
+    /* ---------- Tokens ---------- */
     :root {
-      --paper: #f5f6f8;
-      --page: #ffffff;
-      --ink: #1e2740;
-      --muted: #5d667a;
-      --line: #dce0e8;
-      --marker: #f3d44b;
-      --danger: #b3412f;
-      --serif: "Literata", Georgia, "Times New Roman", serif;
-      --sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+      --bg: #f7dee5;
+      --surface: #fffafb;
+      --sunken: #f6e7ec;
+      --ink: #2c3832;
+      --muted: #6a7a71;
+      --line: #efd5dd;
+      --accent: #4f7d66;
+      --accent-ink: #ffffff;
+      --accent-soft: #dceade;
+      --danger: #b0524b;
+
+      /* Each mood has its own colour; the selected entry's page takes it on. */
+      --mood-great: #e8b64a;
+      --mood-good: #84bb86;
+      --mood-okay: #93aed0;
+      --mood-low: #b29fd2;
+      --mood-rough: #d59393;
+      --mood: transparent;
+
+      --serif: "Newsreader", Georgia, "Times New Roman", serif;
+      --sans: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+      --r-sheet: 28px;
+      --r-card: 18px;
+      --r-input: 12px;
       color-scheme: light;
     }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --paper: #161a23;
-        --page: #1e2330;
-        --ink: #e8eaf0;
-        --muted: #9aa2b5;
-        --line: #2e3445;
-        --marker: #8c7520;
-        --danger: #e07a66;
-        color-scheme: dark;
-      }
-    }
+    [data-mood="great"] { --mood: var(--mood-great); }
+    [data-mood="good"]  { --mood: var(--mood-good); }
+    [data-mood="okay"]  { --mood: var(--mood-okay); }
+    [data-mood="low"]   { --mood: var(--mood-low); }
+    [data-mood="rough"] { --mood: var(--mood-rough); }
 
+    /* ---------- Base ---------- */
     * { box-sizing: border-box; }
     [v-cloak] { display: none; }
+    html, body { height: 100%; }
     body {
       margin: 0;
-      background: var(--paper);
+      background: var(--bg);
       color: var(--ink);
-      font: 16px/1.5 var(--sans);
+      font: 16px/1.55 var(--sans);
+      -webkit-font-smoothing: antialiased;
     }
     button, input, textarea, select { font: inherit; color: inherit; }
-    :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+    button { cursor: pointer; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+    .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
-    /* The one bold idea: a highlighter stroke marks what matters (selection, day headings). */
-    .marked {
-      background: linear-gradient(transparent 58%, var(--marker) 58%, var(--marker) 92%, transparent 92%);
-    }
+    .app { display: flex; flex-direction: column; min-height: 100vh; padding: 0 20px 20px; }
 
+    /* ---------- Header ---------- */
     header {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 1rem;
-      padding: 1rem 1.5rem;
-      border-bottom: 1px solid var(--line);
-      background: var(--page);
+      padding: 18px 8px;
     }
-    header h1 { margin: 0; font: 600 1.35rem/1.2 var(--serif); }
-    nav { display: flex; gap: .25rem; }
-    nav button {
-      border: 0;
-      background: none;
-      padding: .4rem .8rem;
-      border-radius: 6px;
-      cursor: pointer;
-      color: var(--muted);
+    .brand { display: flex; align-items: center; gap: .6rem; }
+    .brand-mark {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: conic-gradient(var(--mood-great), var(--mood-good), var(--mood-okay), var(--mood-low), var(--mood-rough), var(--mood-great));
+      opacity: .85;
     }
-    nav button[aria-pressed="true"] { color: var(--ink); font-weight: 600; }
+    .brand h1 { margin: 0; font: 500 1.4rem/1 var(--serif); letter-spacing: -.01em; }
 
+    .tabs {
+      display: inline-flex;
+      background: var(--sunken);
+      border-radius: 999px;
+      padding: 4px;
+    }
+    .tabs button {
+      border: 0;
+      background: transparent;
+      padding: .45rem 1.2rem;
+      border-radius: 999px;
+      color: var(--muted);
+      font-weight: 600;
+      transition: background .2s, color .2s;
+    }
+    .tabs button[aria-pressed="true"] { background: var(--surface); color: var(--ink); }
+
+    /* ---------- Layout ---------- */
     main {
+      flex: 1;
       display: grid;
-      grid-template-columns: minmax(260px, 340px) 1fr;
-      min-height: calc(100vh - 66px);
+      grid-template-columns: minmax(270px, 330px) 1fr;
+      gap: 20px;
+      min-height: 0;
     }
     aside {
-      border-right: 1px solid var(--line);
-      padding: 1.25rem;
+      background: var(--surface);
+      border-radius: var(--r-sheet);
+      padding: 22px;
       overflow-y: auto;
+      max-height: calc(100vh - 106px);
+      position: sticky;
+      top: 20px;
     }
-    section.workspace {
-      padding: 2rem clamp(1.25rem, 4vw, 3.5rem);
-      max-width: 860px;
-      width: 100%;
+    .sheet {
+      background: color-mix(in srgb, var(--mood) 9%, var(--surface));
+      border-radius: var(--r-sheet);
+      padding: clamp(24px, 4vw, 52px);
+      transition: background .4s;
+      min-width: 0;
     }
+    .sheet:not([data-mood]) { background: var(--surface); }
 
+    /* ---------- Buttons and inputs ---------- */
     .btn {
-      border: 1px solid var(--ink);
-      background: var(--ink);
-      color: var(--page);
-      border-radius: 6px;
-      padding: .5rem 1rem;
-      cursor: pointer;
-      font-weight: 500;
+      border: 0;
+      background: var(--accent);
+      color: var(--accent-ink);
+      border-radius: 999px;
+      padding: .6rem 1.25rem;
+      font-weight: 600;
+      transition: filter .15s;
     }
-    .btn.quiet { background: transparent; color: var(--ink); border-color: var(--line); }
-    .btn.danger { background: transparent; color: var(--danger); border-color: transparent; }
-    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn:hover:not(:disabled) { filter: brightness(1.06); }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn.soft { background: var(--accent-soft); color: var(--ink); }
+    .btn.ghost { background: transparent; color: var(--muted); }
+    .btn.danger { background: transparent; color: var(--danger); }
+    .btn.small { padding: .35rem .85rem; font-size: .875rem; }
+    .btn.full { width: 100%; }
+
+    .field-label { display: block; font-weight: 600; margin: 1.4rem 0 .5rem; }
+    .hint { font-weight: 400; color: var(--muted); font-size: .85rem; }
 
     .search {
       width: 100%;
-      padding: .5rem .75rem;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: var(--page);
-      margin: .75rem 0 1rem;
+      margin: 1rem 0 .75rem;
+      padding: .6rem .9rem;
+      border: 0;
+      border-radius: var(--r-input);
+      background: var(--sunken);
     }
+    .search::placeholder, textarea::placeholder, input::placeholder { color: var(--muted); }
 
-    .entry-list { list-style: none; margin: 0; padding: 0; }
+    /* ---------- Journal: entry list ---------- */
+    .entry-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
     .entry-list button {
-      display: block;
+      display: grid;
+      grid-template-columns: 10px 1fr;
+      gap: .1rem .75rem;
       width: 100%;
       text-align: left;
       border: 0;
-      background: none;
-      padding: .7rem .5rem;
-      border-bottom: 1px solid var(--line);
-      cursor: pointer;
+      background: transparent;
+      border-radius: 14px;
+      padding: .7rem .75rem;
+      transition: background .2s;
     }
-    .entry-list .date { font-size: .8rem; color: var(--muted); }
-    .entry-list .title { display: inline; font: 600 1rem/1.4 var(--serif); }
-    .entry-list .preview {
-      display: block;
-      font-size: .875rem;
+    .entry-list button:hover { background: var(--sunken); }
+    .entry-list button[aria-current="true"] { background: color-mix(in srgb, var(--mood, var(--accent)) 18%, var(--surface)); }
+    .entry-list button:not([data-mood])[aria-current="true"] { background: var(--accent-soft); }
+    .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      margin-top: .45rem;
+      background: var(--mood);
+      box-shadow: inset 0 0 0 1.5px var(--line);
+    }
+    [data-mood] > .dot, [data-mood] .dot { box-shadow: none; }
+    .entry-title { font: 500 1.05rem/1.35 var(--serif); }
+    .entry-meta {
+      grid-column: 2;
+      font-size: .85rem;
       color: var(--muted);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .empty { color: var(--muted); font-size: .95rem; }
+    .empty { color: var(--muted); font-size: .95rem; margin: .5rem 0; }
 
-    .title-input {
-      width: 100%;
-      border: 0;
-      background: none;
-      font: 600 clamp(1.6rem, 3vw, 2.1rem)/1.2 var(--serif);
-      padding: 0;
-      margin-bottom: .75rem;
-    }
-    .title-input:focus-visible, .body-input:focus-visible { outline: none; }
-    .body-input {
-      width: 100%;
-      min-height: 50vh;
-      border: 0;
-      background: none;
-      resize: vertical;
-      font: 400 1.1rem/1.8 var(--serif);
-      max-width: 68ch;
-    }
-    .toolbar {
+    /* ---------- Journal: editor ---------- */
+    .editor { max-width: 720px; margin: 0 auto; }
+    .editor-top {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: .75rem;
-      margin-bottom: 1.5rem;
-      color: var(--muted);
-      font-size: .9rem;
+      margin-bottom: 1.75rem;
     }
-    .toolbar .spacer { flex: 1; }
-    select {
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: var(--page);
-      padding: .35rem .5rem;
+    .date { color: var(--muted); font-size: .95rem; }
+    .spacer { flex: 1; }
+    .title-input {
+      width: 100%;
+      border: 0;
+      background: none;
+      padding: 0;
+      font: 500 clamp(1.8rem, 3.4vw, 2.5rem)/1.15 var(--serif);
+      letter-spacing: -.015em;
     }
+    .body-input {
+      width: 100%;
+      min-height: 46vh;
+      margin-top: 1rem;
+      border: 0;
+      background: none;
+      resize: vertical;
+      font: 400 1.2rem/1.75 var(--serif);
+    }
+    .title-input:focus-visible, .body-input:focus-visible { outline: none; }
 
-    .notice { font-size: .9rem; color: var(--muted); min-height: 1.4em; }
+    .moods { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: 1.5rem; }
+    .moods-label { width: 100%; font-size: .9rem; color: var(--muted); margin-bottom: .1rem; }
+    .mood-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: .45rem;
+      border: 0;
+      border-radius: 999px;
+      padding: .4rem .85rem .4rem .6rem;
+      background: var(--sunken);
+      font-size: .9rem;
+      text-transform: capitalize;
+      transition: background .2s;
+    }
+    .mood-chip .dot { margin: 0; }
+    .mood-chip[aria-pressed="true"] { background: color-mix(in srgb, var(--mood) 35%, var(--surface)); font-weight: 600; }
+
+    .status { min-height: 1.5em; margin-top: 1rem; font-size: .9rem; color: var(--muted); }
     .error { color: var(--danger); font-size: .9rem; }
 
-    /* Planner */
-    label.field { display: block; font-weight: 600; margin: 1.25rem 0 .4rem; }
-    .hint { font-weight: 400; color: var(--muted); font-size: .875rem; }
-    .scope { display: flex; gap: .5rem; }
-    .scope button {
-      flex: 1;
-      border: 1px solid var(--line);
-      background: var(--page);
-      border-radius: 6px;
-      padding: .5rem;
-      cursor: pointer;
+    /* ---------- Planner: form ---------- */
+    .scope {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      background: var(--sunken);
+      border-radius: 999px;
+      padding: 4px;
     }
-    .scope button[aria-pressed="true"] { border-color: var(--ink); font-weight: 600; }
+    .scope button {
+      border: 0;
+      background: transparent;
+      border-radius: 999px;
+      padding: .5rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .scope button[aria-pressed="true"] { background: var(--surface); color: var(--ink); }
     textarea.ideas {
       width: 100%;
-      min-height: 120px;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: var(--page);
-      padding: .6rem .75rem;
+      min-height: 110px;
+      border: 0;
+      border-radius: var(--r-input);
+      background: var(--sunken);
+      padding: .75rem .9rem;
       resize: vertical;
     }
-    .suggest { margin-top: .6rem; }
     .suggestion {
       margin-top: .75rem;
-      padding: .75rem .9rem;
-      border: 1px dashed var(--line);
-      border-radius: 6px;
-      background: var(--page);
+      padding: .9rem 1rem;
+      border-radius: var(--r-card);
+      background: var(--accent-soft);
     }
-    .suggestion p { margin: 0 0 .15rem; font: 400 1.05rem/1.5 var(--serif); }
-    .suggestion .category { font-size: .8rem; color: var(--muted); }
-    .suggestion .actions { display: flex; gap: .5rem; margin-top: .6rem; }
-    .btn.small { padding: .3rem .7rem; font-size: .875rem; }
-    .pick-list { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow-y: auto; }
+    .suggestion p { margin: 0; font: 400 1.1rem/1.45 var(--serif); }
+    .suggestion .category { font-size: .8rem; color: var(--muted); text-transform: capitalize; }
+    .suggestion .actions { display: flex; gap: .4rem; margin-top: .7rem; }
+    .suggest-row { margin-top: .6rem; }
+
+    .pick-list { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
     .pick-list label {
-      display: flex;
+      display: grid;
+      grid-template-columns: auto 10px 1fr auto;
+      align-items: center;
       gap: .6rem;
-      align-items: baseline;
-      padding: .35rem 0;
+      padding: .45rem .25rem;
+      border-radius: 10px;
       cursor: pointer;
       font-size: .95rem;
     }
-    .pick-list .date { color: var(--muted); font-size: .8rem; margin-left: auto; white-space: nowrap; }
+    .pick-list .dot { margin: 0; }
+    .pick-list .when { color: var(--muted); font-size: .8rem; white-space: nowrap; }
+    input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
 
-    .plan-summary { font: 400 1.15rem/1.7 var(--serif); max-width: 62ch; margin: 0 0 2rem; }
-    .days {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-      gap: 2rem 1.75rem;
-    }
-    .day h3 { margin: 0; font: 600 1.15rem/1.3 var(--serif); }
-    .day .focus { color: var(--muted); font-size: .9rem; margin: .2rem 0 .6rem; }
-    .day ul { margin: 0; padding-left: 1.1rem; }
-    .day li { margin-bottom: .3rem; }
-    .tips { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--line); }
-    .tips h3 { margin: 0 0 .5rem; font-size: 1rem; }
-    .past { margin-top: 2rem; }
-    .past h2 { font-size: 1rem; margin: 0 0 .5rem; }
+    .past { margin-top: 1.75rem; }
+    .past h2 { font-size: .95rem; margin: 0 0 .4rem; }
     .past button {
       display: block;
       width: 100%;
       text-align: left;
-      background: none;
       border: 0;
-      padding: .4rem 0;
-      cursor: pointer;
+      background: transparent;
+      border-radius: 10px;
+      padding: .45rem .6rem;
       color: var(--muted);
       font-size: .9rem;
     }
-    .past button[aria-current="true"] { color: var(--ink); font-weight: 600; }
+    .past button:hover { background: var(--sunken); }
+    .past button[aria-current="true"] { background: var(--accent-soft); color: var(--ink); font-weight: 600; }
 
-    @media (max-width: 760px) {
-      main { grid-template-columns: 1fr; }
-      aside { border-right: 0; border-bottom: 1px solid var(--line); max-height: 45vh; }
-      .body-input { min-height: 40vh; }
+    /* ---------- Planner: result ---------- */
+    .plan-head { max-width: 760px; margin-bottom: 2rem; }
+    .plan-kicker { color: var(--muted); font-size: .95rem; margin: 0 0 .4rem; }
+    .plan-summary { margin: 0; font: 400 clamp(1.3rem, 2.2vw, 1.6rem)/1.5 var(--serif); }
+    .week {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 14px;
+    }
+    .day {
+      background: var(--surface);
+      border-radius: var(--r-card);
+      padding: 18px 18px 20px;
+    }
+    .sheet .day { background: color-mix(in srgb, var(--surface) 70%, var(--bg)); }
+    .day h3 { margin: 0; font: 500 1.25rem/1.2 var(--serif); }
+    .focus {
+      display: inline-block;
+      margin: .5rem 0 .9rem;
+      padding: .2rem .65rem;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      font-size: .82rem;
+      font-weight: 600;
+    }
+    .tasks { list-style: none; margin: 0; padding: 0; display: grid; gap: .55rem; }
+    .tasks li { display: grid; grid-template-columns: 14px 1fr; gap: .6rem; font-size: .95rem; line-height: 1.4; }
+    .tasks li::before {
+      content: "";
+      width: 12px; height: 12px;
+      margin-top: .2rem;
+      border-radius: 50%;
+      border: 1.5px solid var(--accent);
+    }
+    .tips {
+      margin-top: 1.5rem;
+      padding: 18px 22px;
+      border-radius: var(--r-card);
+      background: var(--accent-soft);
+      max-width: 760px;
+    }
+    .tips h3 { margin: 0 0 .4rem; font-size: 1rem; }
+    .tips ul { margin: 0; padding-left: 1.1rem; }
+
+    /* Empty and loading states share the same ghost week */
+    .ghost .day { background: transparent; border: 1.5px dashed var(--line); }
+    .ghost .bar { height: 10px; border-radius: 6px; background: var(--sunken); margin: .7rem 0; }
+    .ghost .bar.short { width: 45%; }
+    .ghost .bar.mid { width: 75%; }
+    .loading .bar { animation: breathe 1.6s ease-in-out infinite; }
+    .loading .day:nth-child(2) .bar { animation-delay: .2s; }
+    .loading .day:nth-child(3) .bar { animation-delay: .4s; }
+    @keyframes breathe { 50% { opacity: .35; } }
+    .ghost-note { color: var(--muted); margin: 0 0 1.5rem; font-size: 1.05rem; }
+
+    /* ---------- Responsive and motion ---------- */
+    @media (max-width: 800px) {
+      .app { padding: 0 12px 12px; }
+      main { grid-template-columns: 1fr; gap: 12px; }
+      aside { position: static; max-height: none; }
+      .body-input { min-height: 36vh; }
     }
     @media (prefers-reduced-motion: reduce) {
-      * { transition: none !important; animation: none !important; }
+      *, *::before { transition: none !important; animation: none !important; }
     }
   </style>
 </head>
 <body>
-<div id="app" v-cloak>
+<div id="app" class="app" v-cloak>
   <header>
-    <h1>Smart Journal</h1>
-    <nav aria-label="Sections">
-      <button :aria-pressed="tab === 'journal'" @click="tab = 'journal'">
-        <span :class="{ marked: tab === 'journal' }">Journal</span>
-      </button>
-      <button :aria-pressed="tab === 'plan'" @click="openPlanner">
-        <span :class="{ marked: tab === 'plan' }">Plan</span>
-      </button>
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <h1>Smart Journal</h1>
+    </div>
+    <nav class="tabs" aria-label="Sections">
+      <button :aria-pressed="tab === 'journal'" @click="tab = 'journal'">Journal</button>
+      <button :aria-pressed="tab === 'plan'" @click="openPlanner">Plan</button>
     </nav>
   </header>
 
-  <!-- Journal -->
+  <!-- ================= Journal ================= -->
   <main v-if="tab === 'journal'">
     <aside>
-      <button class="btn" @click="newEntry">New entry</button>
-      <input class="search" type="search" v-model="search" placeholder="Search entries" aria-label="Search entries">
+      <button class="btn full" @click="newEntry">New entry</button>
+      <label class="visually-hidden" for="search">Search entries</label>
+      <input id="search" class="search" type="search" v-model="search" placeholder="Search entries">
+
       <p v-if="!entries.length" class="empty">
-        {{ search ? 'No entries match that search.' : 'No entries yet. Write your first one on the right.' }}
+        {{ search ? 'No entries match that search.' : 'No entries yet. Your first one is waiting on the right.' }}
       </p>
       <ul class="entry-list">
         <li v-for="entry in entries" :key="entry.id">
-          <button @click="selectEntry(entry)" :aria-current="entry.id === draft.id">
-            <span class="date">{{ formatDate(entry.created_at) }}</span><br>
-            <span class="title" :class="{ marked: entry.id === draft.id }">{{ entry.title }}</span>
-            <span class="preview">{{ entry.body }}</span>
+          <button :data-mood="entry.mood || undefined" :aria-current="entry.id === draft.id" @click="selectEntry(entry)">
+            <span class="dot" aria-hidden="true"></span>
+            <span class="entry-title">{{ entry.title }}</span>
+            <span class="entry-meta">{{ formatDate(entry.created_at) }}, {{ entry.body }}</span>
           </button>
         </li>
       </ul>
     </aside>
 
-    <section class="workspace">
-      <div class="toolbar">
-        <span>{{ draft.id ? 'Written ' + formatDate(draft.created_at) : 'New entry' }}</span>
-        <label>Mood
-          <select v-model="draft.mood">
-            <option :value="null">Not set</option>
-            <option v-for="mood in moods" :key="mood" :value="mood">{{ mood }}</option>
-          </select>
-        </label>
-        <span class="spacer"></span>
-        <button v-if="draft.id" class="btn danger" @click="deleteEntry">Delete</button>
-        <button class="btn" :disabled="saving || !canSave" @click="saveEntry">
-          {{ saving ? 'Saving…' : 'Save entry' }}
-        </button>
+    <section class="sheet" :data-mood="draft.mood || undefined">
+      <div class="editor">
+        <div class="editor-top">
+          <span class="date">{{ draft.id ? formatLongDate(draft.created_at) : formatLongDate(new Date().toISOString()) }}</span>
+          <span class="spacer"></span>
+          <button v-if="draft.id" class="btn danger small" @click="deleteEntry">Delete</button>
+          <button class="btn" :disabled="saving || !canSave" @click="saveEntry">
+            {{ saving ? 'Saving…' : 'Save entry' }}
+          </button>
+        </div>
+
+        <input class="title-input" v-model="draft.title" placeholder="Give today a title" aria-label="Entry title" maxlength="200">
+        <textarea class="body-input" v-model="draft.body" placeholder="What happened today? How are you feeling?" aria-label="Entry text"></textarea>
+
+        <div class="moods" role="group" aria-label="Mood">
+          <span class="moods-label">How did today feel?</span>
+          <button v-for="mood in moods" :key="mood" class="mood-chip" :data-mood="mood"
+                  :aria-pressed="draft.mood === mood" @click="draft.mood = draft.mood === mood ? null : mood">
+            <span class="dot" aria-hidden="true"></span>{{ mood }}
+          </button>
+        </div>
+
+        <p class="status" aria-live="polite">{{ notice }}</p>
+        <p v-if="error" class="error" role="alert">{{ error }}</p>
       </div>
-      <input class="title-input" v-model="draft.title" placeholder="Title" aria-label="Entry title" maxlength="200">
-      <textarea class="body-input" v-model="draft.body" placeholder="What happened today?" aria-label="Entry text"></textarea>
-      <p class="notice" aria-live="polite">{{ notice }}</p>
-      <p v-if="error" class="error" role="alert">{{ error }}</p>
     </section>
   </main>
 
-  <!-- Planner -->
+  <!-- ================= Planner ================= -->
   <main v-else>
     <aside>
-      <label class="field">Plan for</label>
-      <div class="scope">
+      <span class="field-label" style="margin-top: 0">Plan for</span>
+      <div class="scope" role="group" aria-label="Plan for">
         <button :aria-pressed="scope === 'week'" @click="scope = 'week'">This week</button>
         <button :aria-pressed="scope === 'weekend'" @click="scope = 'weekend'">This weekend</button>
       </div>
 
-      <label class="field" for="ideas">Ideas <span class="hint">anything you want to fit in</span></label>
+      <label class="field-label" for="ideas">Ideas <span class="hint">anything you want to fit in</span></label>
       <textarea id="ideas" class="ideas" v-model="ideas" maxlength="4000"
         placeholder="Finish AWS practice exam, climbing on Saturday, call Mum"></textarea>
 
-      <div class="suggest">
-        <button class="btn quiet small" :disabled="suggesting" @click="suggest">
+      <div class="suggest-row">
+        <button class="btn soft small" :disabled="suggesting" @click="suggest">
           {{ suggestion ? 'Suggest something else' : 'Suggest something to do' }}
         </button>
         <div class="suggestion" v-if="suggestion" aria-live="polite">
-          <p>{{ suggestion.text }}</p>
           <span class="category">{{ suggestion.category }}</span>
+          <p>{{ suggestion.text }}</p>
           <div class="actions">
             <button class="btn small" @click="addSuggestion">Add to ideas</button>
-            <button class="btn quiet small" @click="suggestion = null">Dismiss</button>
+            <button class="btn ghost small" @click="suggestion = null">Dismiss</button>
           </div>
         </div>
       </div>
 
-      <label class="field">Use journal entries <span class="hint">optional, up to 20</span></label>
+      <span class="field-label">Use journal entries <span class="hint">optional, up to 20</span></span>
       <p v-if="!recentEntries.length" class="empty">Your entries will show up here once you write some.</p>
       <ul class="pick-list">
         <li v-for="entry in recentEntries" :key="entry.id">
-          <label>
-            <input type="checkbox" :value="entry.id" v-model="chosenIds" :disabled="!chosenIds.includes(entry.id) && chosenIds.length >= 20">
+          <label :data-mood="entry.mood || undefined">
+            <input type="checkbox" :value="entry.id" v-model="chosenIds"
+                   :disabled="!chosenIds.includes(entry.id) && chosenIds.length >= 20">
+            <span class="dot" aria-hidden="true"></span>
             <span>{{ entry.title }}</span>
-            <span class="date">{{ formatDate(entry.created_at) }}</span>
+            <span class="when">{{ formatDate(entry.created_at) }}</span>
           </label>
         </li>
       </ul>
 
-      <p style="margin-top: 1.25rem">
-        <button class="btn" :disabled="planning || (!ideas.trim() && !chosenIds.length)" @click="makePlan">
+      <p style="margin: 1.5rem 0 0">
+        <button class="btn full" :disabled="planning || (!ideas.trim() && !chosenIds.length)" @click="makePlan">
           {{ planning ? 'Making your plan…' : 'Make my plan' }}
         </button>
       </p>
@@ -355,21 +483,44 @@
 
       <div class="past" v-if="plans.length">
         <h2>Earlier plans</h2>
-        <button v-for="p in plans" :key="p.id" :aria-current="plan && plan.id === p.id" @click="plan = p">
+        <button v-for="p in plans" :key="p.id" :aria-current="!!plan && plan.id === p.id" @click="plan = p">
           {{ p.scope === 'week' ? 'Week' : 'Weekend' }} plan, {{ formatDate(p.created_at) }}
         </button>
       </div>
     </aside>
 
-    <section class="workspace" aria-live="polite">
-      <p v-if="!plan" class="empty">Add some ideas or pick a few entries, then make a plan.</p>
+    <section class="sheet" aria-live="polite">
+      <!-- Loading: the ghost week breathes while Claude works -->
+      <template v-if="planning">
+        <p class="ghost-note">Making your {{ scope }} plan…</p>
+        <div class="week ghost loading">
+          <div class="day" v-for="n in (scope === 'week' ? 7 : 3)" :key="n">
+            <div class="bar short"></div><div class="bar mid"></div><div class="bar"></div><div class="bar mid"></div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Empty: a preview of what a plan will look like -->
+      <template v-else-if="!plan">
+        <p class="ghost-note">Add a few ideas or pick some entries, and your plan will appear here.</p>
+        <div class="week ghost">
+          <div class="day" v-for="n in 3" :key="n">
+            <div class="bar short"></div><div class="bar mid"></div><div class="bar"></div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Result -->
       <template v-else>
-        <p class="plan-summary">{{ plan.content.summary }}</p>
-        <div class="days">
+        <div class="plan-head">
+          <p class="plan-kicker">Your {{ plan.scope }}, made {{ formatDate(plan.created_at) }}</p>
+          <p class="plan-summary">{{ plan.content.summary }}</p>
+        </div>
+        <div class="week">
           <article class="day" v-for="day in plan.content.days" :key="day.day">
-            <h3><span class="marked">{{ day.day }}</span></h3>
-            <p class="focus">{{ day.focus }}</p>
-            <ul>
+            <h3>{{ day.day }}</h3>
+            <span class="focus">{{ day.focus }}</span>
+            <ul class="tasks">
               <li v-for="(task, i) in day.tasks" :key="i">{{ task }}</li>
             </ul>
           </article>
@@ -437,6 +588,9 @@
 
       const formatDate = iso => iso
         ? new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+        : '';
+      const formatLongDate = iso => iso
+        ? new Date(iso).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
         : '';
 
       async function loadEntries() {
@@ -554,7 +708,8 @@
       return {
         tab, moods, entries, search, draft, saving, notice, error, canSave,
         scope, ideas, chosenIds, recentEntries, planning, planError, plan, plans, suggestion, suggesting,
-        formatDate, newEntry, selectEntry, saveEntry, deleteEntry, openPlanner, makePlan, suggest, addSuggestion,
+        formatDate, formatLongDate, newEntry, selectEntry, saveEntry, deleteEntry, openPlanner, makePlan,
+        suggest, addSuggestion,
       };
     },
   }).mount('#app');
