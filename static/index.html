@@ -290,9 +290,11 @@
 
     .past { margin-top: 1.75rem; }
     .past h2 { font-size: .95rem; margin: 0 0 .4rem; }
-    .past button {
+    .past ul { list-style: none; margin: 0; padding: 0; }
+    .past li { display: flex; align-items: center; gap: .25rem; }
+    .past .open-plan {
+      flex: 1;
       display: block;
-      width: 100%;
       text-align: left;
       border: 0;
       background: transparent;
@@ -301,11 +303,27 @@
       color: var(--muted);
       font-size: .9rem;
     }
-    .past button:hover { background: var(--sunken); }
-    .past button[aria-current="true"] { background: var(--accent-soft); color: var(--ink); font-weight: 600; }
+    .past .open-plan:hover { background: var(--sunken); }
+    .past .open-plan[aria-current="true"] { background: var(--accent-soft); color: var(--ink); font-weight: 600; }
+    .icon-btn {
+      flex: none;
+      width: 28px; height: 28px;
+      display: inline-grid; place-items: center;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--muted);
+      font-size: 1.1rem;
+      line-height: 1;
+      opacity: .55;
+      transition: opacity .15s, background .15s, color .15s;
+    }
+    .icon-btn:hover, .icon-btn:focus-visible { opacity: 1; background: var(--sunken); color: var(--danger); }
+    .icon-btn:disabled { cursor: wait; }
 
     /* ---------- Planner: result ---------- */
-    .plan-head { max-width: 760px; margin-bottom: 2rem; }
+    .plan-head { display: flex; align-items: flex-start; gap: 1.5rem; margin-bottom: 2rem; }
+    .plan-head > div { max-width: 760px; flex: 1; }
     .plan-kicker { color: var(--muted); font-size: .95rem; margin: 0 0 .4rem; }
     .plan-summary { margin: 0; font: 400 clamp(1.3rem, 2.2vw, 1.6rem)/1.5 var(--serif); }
     .week {
@@ -330,7 +348,11 @@
       font-weight: 600;
     }
     .tasks { list-style: none; margin: 0; padding: 0; display: grid; gap: .55rem; }
-    .tasks li { display: grid; grid-template-columns: 14px 1fr; gap: .6rem; font-size: .95rem; line-height: 1.4; }
+    .tasks li { display: grid; grid-template-columns: 14px 1fr auto; gap: .6rem; align-items: start; font-size: .95rem; line-height: 1.4; }
+    .tasks .icon-btn { width: 24px; height: 24px; font-size: 1rem; margin-top: -.15rem; opacity: 0; }
+    .tasks li:hover .icon-btn, .tasks .icon-btn:focus-visible { opacity: .7; }
+    @media (hover: none) { .tasks .icon-btn { opacity: .5; } }
+    .empty-day { color: var(--muted); font-size: .9rem; margin: 0; }
     .tasks li::before {
       content: "";
       width: 12px; height: 12px;
@@ -359,11 +381,58 @@
     @keyframes breathe { 50% { opacity: .35; } }
     .ghost-note { color: var(--muted); margin: 0 0 1.5rem; font-size: 1.05rem; }
 
+    /* ---------- Accounts ---------- */
+    .account { display: flex; align-items: center; gap: .5rem; }
+    .account-email { color: var(--muted); font-size: .9rem; max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .auth-wrap {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px 16px;
+    }
+    .auth-card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--surface);
+      border-radius: var(--r-sheet);
+      padding: clamp(28px, 6vw, 44px);
+    }
+    .auth-card .brand { margin-bottom: 1.75rem; }
+    .auth-card h2 { margin: 0 0 .5rem; font: 500 1.6rem/1.2 var(--serif); }
+    .auth-card p { margin: 0 0 1rem; }
+    .auth-tabs { display: grid; grid-template-columns: 1fr 1fr; width: 100%; margin-bottom: 1.5rem; }
+    .input {
+      width: 100%;
+      border: 0;
+      border-radius: var(--r-input);
+      background: var(--sunken);
+      padding: .7rem .9rem;
+    }
+    .auth-card .field-label { margin-top: 1rem; }
+    .auth-card .btn.full { margin-top: 1.5rem; }
+    .auth-links { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: 1rem; }
+    .notice-ok {
+      background: var(--accent-soft);
+      border-radius: var(--r-input);
+      padding: .7rem .9rem;
+      font-size: .95rem;
+      margin-bottom: 1rem;
+    }
+    .dev-hint {
+      font-size: .875rem;
+      color: var(--muted);
+      background: var(--sunken);
+      border-radius: var(--r-input);
+      padding: .7rem .9rem;
+    }
+
     /* ---------- Responsive and motion ---------- */
     @media (max-width: 800px) {
       .app { padding: 0 12px 12px; }
       main { grid-template-columns: 1fr; gap: 12px; }
       aside { position: static; max-height: none; }
+      .account-email { display: none; }
       .body-input { min-height: 36vh; }
     }
     @media (prefers-reduced-motion: reduce) {
@@ -372,7 +441,64 @@
   </style>
 </head>
 <body>
-<div id="app" class="app" v-cloak>
+<div id="app" v-cloak>
+
+<!-- ================= Accounts ================= -->
+<div v-if="checking"></div>
+
+<div v-else-if="!user" class="auth-wrap">
+  <div class="auth-card">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <h1>Smart Journal</h1>
+    </div>
+
+    <p v-if="authNotice" class="notice-ok" role="status">{{ authNotice }}</p>
+
+    <!-- After sign-up: check your email -->
+    <template v-if="authMode === 'check-email'">
+      <h2>Check your email</h2>
+      <p>We've sent a verification link to <strong>{{ authEmail }}</strong>. Open it to activate your account, then log in.</p>
+      <p class="dev-hint">Running locally? No real email is sent. The link is printed in the terminal where the server is running.</p>
+      <div class="auth-links">
+        <button class="btn soft small" :disabled="authBusy" @click="resendVerification">Send a new link</button>
+        <button class="btn ghost small" @click="switchAuthMode('login')">Back to log in</button>
+      </div>
+    </template>
+
+    <!-- Log in / create account -->
+    <template v-else>
+      <div class="tabs auth-tabs" role="group" aria-label="Account">
+        <button :aria-pressed="authMode === 'login'" @click="switchAuthMode('login')">Log in</button>
+        <button :aria-pressed="authMode === 'register'" @click="switchAuthMode('register')">Create account</button>
+      </div>
+
+      <form @submit.prevent="submitAuth" novalidate>
+        <label class="field-label" for="auth-email">Email</label>
+        <input id="auth-email" class="input" type="email" v-model="authEmail" autocomplete="email" required>
+
+        <label class="field-label" for="auth-password">
+          Password <span class="hint" v-if="authMode === 'register'">at least 8 characters</span>
+        </label>
+        <input id="auth-password" class="input" type="password" v-model="authPassword" required
+               :autocomplete="authMode === 'register' ? 'new-password' : 'current-password'">
+
+        <button class="btn full" type="submit" :disabled="authBusy || !authEmail.trim() || !authPassword">
+          {{ authBusy ? 'Please wait…' : (authMode === 'register' ? 'Create account' : 'Log in') }}
+        </button>
+      </form>
+
+      <div class="auth-links" v-if="authMode === 'login' && needsVerification">
+        <button class="btn ghost small" :disabled="authBusy" @click="resendVerification">Send a new verification link</button>
+      </div>
+    </template>
+
+    <p v-if="authError" class="error" role="alert">{{ authError }}</p>
+  </div>
+</div>
+
+<!-- ================= The app ================= -->
+<div v-else class="app">
   <header>
     <div class="brand">
       <span class="brand-mark" aria-hidden="true"></span>
@@ -382,6 +508,10 @@
       <button :aria-pressed="tab === 'journal'" @click="tab = 'journal'">Journal</button>
       <button :aria-pressed="tab === 'plan'" @click="openPlanner">Plan</button>
     </nav>
+    <div class="account">
+      <span class="account-email" :title="user.email">{{ user.email }}</span>
+      <button class="btn ghost small" @click="logout()">Log out</button>
+    </div>
   </header>
 
   <!-- ================= Journal ================= -->
@@ -483,9 +613,15 @@
 
       <div class="past" v-if="plans.length">
         <h2>Earlier plans</h2>
-        <button v-for="p in plans" :key="p.id" :aria-current="!!plan && plan.id === p.id" @click="plan = p">
-          {{ p.scope === 'week' ? 'Week' : 'Weekend' }} plan, {{ formatDate(p.created_at) }}
-        </button>
+        <ul>
+          <li v-for="p in plans" :key="p.id">
+            <button class="open-plan" :aria-current="!!plan && plan.id === p.id" @click="plan = p">
+              {{ planLabel(p) }}
+            </button>
+            <button class="icon-btn" :disabled="deletingPlanId === p.id" @click="deletePlan(p)"
+                    :aria-label="`Delete ${planLabel(p)}`" title="Delete this plan">×</button>
+          </li>
+        </ul>
       </div>
     </aside>
 
@@ -513,16 +649,26 @@
       <!-- Result -->
       <template v-else>
         <div class="plan-head">
-          <p class="plan-kicker">Your {{ plan.scope }}, made {{ formatDate(plan.created_at) }}</p>
-          <p class="plan-summary">{{ plan.content.summary }}</p>
+          <div>
+            <p class="plan-kicker">Your {{ plan.scope }}, made {{ formatDate(plan.created_at) }}</p>
+            <p class="plan-summary">{{ plan.content.summary }}</p>
+          </div>
+          <button class="btn danger small" :disabled="deletingPlanId === plan.id" @click="deletePlan(plan)">
+            {{ deletingPlanId === plan.id ? 'Deleting…' : 'Delete plan' }}
+          </button>
         </div>
         <div class="week">
-          <article class="day" v-for="day in plan.content.days" :key="day.day">
+          <article class="day" v-for="(day, d) in plan.content.days" :key="day.day">
             <h3>{{ day.day }}</h3>
             <span class="focus">{{ day.focus }}</span>
-            <ul class="tasks">
-              <li v-for="(task, i) in day.tasks" :key="i">{{ task }}</li>
+            <ul class="tasks" v-if="day.tasks.length">
+              <li v-for="(task, t) in day.tasks" :key="`${d}-${t}-${task}`">
+                <span>{{ task }}</span>
+                <button class="icon-btn" :disabled="removingTask" @click="deleteTask(d, t)"
+                        :aria-label="`Remove task: ${task}`" title="Remove this task">×</button>
+              </li>
             </ul>
+            <p v-else class="empty-day">Nothing planned. Enjoy the space.</p>
           </article>
         </div>
         <div class="tips" v-if="plan.content.tips.length">
@@ -535,15 +681,33 @@
     </section>
   </main>
 </div>
+</div>
 
 <script>
   const { createApp, ref, reactive, computed, watch, onMounted } = Vue;
 
+  // ---------- Session ----------
+  // The access token is kept in localStorage so a refresh keeps you logged in.
+  // Trade-off: any script on the page could read it. An httpOnly cookie would be safer in production.
+  const TOKEN_KEY = 'smart-journal-token';
+  let authToken = null;
+  let onUnauthorized = () => {};
+
+  function readToken() {
+    try { return localStorage.getItem(TOKEN_KEY); } catch { return null; }
+  }
+  function writeToken(token) {
+    try {
+      if (token) localStorage.setItem(TOKEN_KEY, token);
+      else localStorage.removeItem(TOKEN_KEY);
+    } catch { /* storage unavailable: the session just won't survive a refresh */ }
+  }
+
   async function api(path, options = {}) {
-    const response = await fetch(path, {
-      headers: { 'Content-Type': 'application/json' },
-      ...options,
-    });
+    const headers = { 'Content-Type': 'application/json' };
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
+    const response = await fetch(path, { ...options, headers });
+    if (response.status === 401 && !path.startsWith('/api/auth/login')) onUnauthorized();
     if (response.status === 204) return null;
     const data = await response.json().catch(() => null);
     if (!response.ok) {
@@ -562,6 +726,17 @@
 
   createApp({
     setup() {
+      // Account state
+      const checking = ref(true);
+      const user = ref(null);
+      const authMode = ref('login');   // 'login' | 'register' | 'check-email'
+      const authEmail = ref('');
+      const authPassword = ref('');
+      const authBusy = ref(false);
+      const authError = ref('');
+      const authNotice = ref('');
+      const needsVerification = ref(false);
+
       const tab = ref('journal');
       const moods = ['great', 'good', 'okay', 'low', 'rough'];
 
@@ -585,6 +760,8 @@
       const plans = ref([]);
       const suggestion = ref(null);
       const suggesting = ref(false);
+      const deletingPlanId = ref(null);
+      const removingTask = ref(false);
 
       const formatDate = iso => iso
         ? new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
@@ -684,6 +861,42 @@
         }
       }
 
+      const planLabel = p => `${p.scope === 'week' ? 'Week' : 'Weekend'} plan, ${formatDate(p.created_at)}`;
+
+      async function deletePlan(target) {
+        if (!target) return;
+        if (!confirm(`Delete ${planLabel(target)}? This can't be undone.`)) return;
+
+        deletingPlanId.value = target.id;
+        planError.value = '';
+        try {
+          await api(`/api/plans/${target.id}`, { method: 'DELETE' });
+          plans.value = plans.value.filter(p => p.id !== target.id);
+          // If the open plan was deleted, show the next most recent one (if any).
+          if (plan.value && plan.value.id === target.id) plan.value = plans.value[0] || null;
+        } catch (e) {
+          planError.value = e.message;
+        } finally {
+          deletingPlanId.value = null;
+        }
+      }
+
+      async function deleteTask(dayIndex, taskIndex) {
+        const current = plan.value;
+        if (!current) return;
+        removingTask.value = true;
+        planError.value = '';
+        try {
+          const updated = await api(`/api/plans/${current.id}/days/${dayIndex}/tasks/${taskIndex}`, { method: 'DELETE' });
+          plan.value = updated;
+          plans.value = plans.value.map(p => (p.id === updated.id ? updated : p));
+        } catch (e) {
+          planError.value = e.message;
+        } finally {
+          removingTask.value = false;
+        }
+      }
+
       async function suggest() {
         suggesting.value = true;
         planError.value = '';
@@ -703,13 +916,127 @@
         suggestion.value = null;
       }
 
-      onMounted(loadEntries);
+      // ---------- Accounts ----------
+      function switchAuthMode(mode) {
+        authMode.value = mode;
+        authError.value = '';
+        authNotice.value = '';
+        needsVerification.value = false;
+      }
+
+      function resetAppState() {
+        tab.value = 'journal';
+        entries.value = [];
+        search.value = '';
+        newEntry();
+        ideas.value = '';
+        chosenIds.value = [];
+        recentEntries.value = [];
+        plan.value = null;
+        plans.value = [];
+        suggestion.value = null;
+        planError.value = '';
+      }
+
+      function logout(message = '') {
+        authToken = null;
+        writeToken(null);
+        user.value = null;
+        resetAppState();
+        switchAuthMode('login');
+        authPassword.value = '';
+        authNotice.value = message;
+      }
+      onUnauthorized = () => {
+        if (user.value) logout('Your session has ended. Please log in again.');
+      };
+
+      async function startSession(token) {
+        authToken = token;
+        writeToken(token);
+        user.value = await api('/api/auth/me');
+        authPassword.value = '';
+        await loadEntries();
+      }
+
+      async function submitAuth() {
+        authBusy.value = true;
+        authError.value = '';
+        authNotice.value = '';
+        needsVerification.value = false;
+        const credentials = JSON.stringify({ email: authEmail.value.trim(), password: authPassword.value });
+        try {
+          if (authMode.value === 'register') {
+            await api('/api/auth/register', { method: 'POST', body: credentials });
+            authPassword.value = '';
+            authMode.value = 'check-email';
+          } else {
+            const { access_token } = await api('/api/auth/login', { method: 'POST', body: credentials });
+            await startSession(access_token);
+          }
+        } catch (e) {
+          authError.value = e.message;
+          needsVerification.value = /verify/i.test(e.message);
+        } finally {
+          authBusy.value = false;
+        }
+      }
+
+      async function resendVerification() {
+        authBusy.value = true;
+        authError.value = '';
+        try {
+          const { detail } = await api('/api/auth/resend-verification', {
+            method: 'POST',
+            body: JSON.stringify({ email: authEmail.value.trim() }),
+          });
+          authNotice.value = detail;
+        } catch (e) {
+          authError.value = e.message;
+        } finally {
+          authBusy.value = false;
+        }
+      }
+
+      // Handles the link from the verification email: /?verify=<token>
+      async function handleVerifyLink() {
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get('verify');
+        if (!token) return;
+        history.replaceState(null, '', window.location.pathname);  // don't leave the token in the address bar
+        try {
+          const verified = await api('/api/auth/verify', { method: 'POST', body: JSON.stringify({ token }) });
+          authEmail.value = verified.email;
+          switchAuthMode('login');
+          authNotice.value = 'Your email is verified. You can log in now.';
+        } catch (e) {
+          switchAuthMode('login');
+          authError.value = e.message;
+          needsVerification.value = true;
+        }
+      }
+
+      onMounted(async () => {
+        await handleVerifyLink();
+        const saved = readToken();
+        if (saved) {
+          try {
+            await startSession(saved);
+          } catch {
+            authToken = null;
+            writeToken(null);
+          }
+        }
+        checking.value = false;
+      });
 
       return {
+        checking, user, authMode, authEmail, authPassword, authBusy, authError, authNotice, needsVerification,
+        switchAuthMode, submitAuth, resendVerification, logout,
         tab, moods, entries, search, draft, saving, notice, error, canSave,
         scope, ideas, chosenIds, recentEntries, planning, planError, plan, plans, suggestion, suggesting,
         formatDate, formatLongDate, newEntry, selectEntry, saveEntry, deleteEntry, openPlanner, makePlan,
-        suggest, addSuggestion,
+        suggest, addSuggestion, deletePlan, deletingPlanId, deleteTask, removingTask, planLabel,
       };
     },
   }).mount('#app');

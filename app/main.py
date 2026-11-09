@@ -6,15 +6,17 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app import models  # noqa: F401  (registers the tables on Base.metadata)
+from app import config, models  # noqa: F401  (models registers the tables on Base.metadata)
 from app.database import Base, engine
-from app.routers import entries, plans, suggestions
+from app.routers import auth, entries, plans, suggestions
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    if config.SECRET_KEY == config.DEV_SECRET_KEY:
+        print("WARNING: using the development SECRET_KEY. Set SECRET_KEY in .env before deploying.", flush=True)
     Base.metadata.create_all(bind=engine)
     yield
 
@@ -26,6 +28,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.include_router(auth.router)
 app.include_router(entries.router)
 app.include_router(plans.router)
 app.include_router(suggestions.router)

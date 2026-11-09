@@ -1,11 +1,12 @@
 # Smart Journal
 
-A journaling app with an LLM planner. Write daily entries, then turn your ideas and recent entries into a realistic plan for the week or the weekend, generated with the Claude API.
+A private journaling app with user accounts and an LLM planner. Write daily entries, then turn your ideas and recent entries into a realistic plan for the week or the weekend, generated with the Claude API.
 
 ![CI](https://github.com/YOUR-USERNAME/smart-journal/actions/workflows/ci.yml/badge.svg)
 
 ## Features
 
+- **Accounts:** sign up with email and password, verify your email through a link, then log in. Each person only ever sees their own entries and plans.
 - **Journal:** create, edit, search and delete entries, with an optional mood.
 - **Planner:** choose "this week" or "this weekend", add ideas, pick journal entries for context, and get a day-by-day plan with a focus and a few small tasks per day.
 - **Need inspiration?** A "Suggest something to do" button offers a random activity (a walk, a hike, seeing friends) that you can add to your ideas in one click.
@@ -18,7 +19,8 @@ A journaling app with an LLM planner. Write daily entries, then turn your ideas 
 | Backend | Python 3.12, FastAPI |
 | Database | SQLite through SQLAlchemy 2.0 (swappable for PostgreSQL via `DATABASE_URL`) |
 | Validation | Pydantic v2 |
-| LLM | Claude API (Anthropic Python SDK) with tool use for structured output |
+| Auth | bcrypt password hashing, JWT access tokens, email verification links |
+| LLM | Claude API (tool use) or Gemini API (JSON schema), chosen with `LLM_PROVIDER` |
 | Frontend | Vue 3 (loaded from a CDN, no build step), served by FastAPI |
 | Testing | pytest with FastAPI's TestClient |
 | Delivery | Docker, GitHub Actions CI |
@@ -51,9 +53,21 @@ tests/             pytest suite (no real API calls)
 
 ## Design decisions
 
+**Accounts and verification.** Passwords are hashed with bcrypt and never stored or returned. Logging in returns a short-lived JWT access token, which the frontend sends as `Authorization: Bearer <token>`. Sign-up sends a verification link containing a separate signed token that expires after 24 hours; each token carries a `purpose`, so a verification token can't be used as a login token or the other way round. Unverified users can't log in.
+
+**Privacy between users.** Every entry and plan has a `user_id`, and every query filters by the logged-in user. Asking for someone else's entry returns the same 404 as a missing one, so ids can't be probed. Tests check this for read, update, delete and planning.
+
+**Not leaking who has an account.** A wrong password and an unknown email return the same 401 message, and the unknown-email path still runs a bcrypt check so both take the same time. Resending a verification link always returns the same reply.
+
+**Email in development.** Emails go through an `EmailSender` interface. The default prints them to the server terminal, so you can click the verification link locally; a real provider is one more class.
+
 **Structured output through tool use.** Instead of asking the model for JSON in free text and hoping it parses, the planner forces Claude to call a `save_plan` tool whose input schema matches the `PlanContent` model. The result is then validated with Pydantic. If the model returns the wrong shape or no tool call, the API returns a clear 502 and nothing is saved.
 
 **User text is treated as data, not instructions.** Journal entries and ideas are wrapped in `<journal_entries>` and `<ideas>` tags, and the system prompt tells the model to treat them as material to plan from. This reduces the risk of prompt injection from user content. Entries are also truncated to keep prompts a predictable size.
+
+**Swappable LLM providers.** `ClaudePlanner` and `GeminiPlanner` implement the same `Planner` interface, so switching providers is one setting in `.env` (`LLM_PROVIDER=claude` or `gemini`). Each uses its provider's native structured-output feature, and both results are validated against the same Pydantic model.
+
+**Retries with exponential backoff.** When Gemini is overloaded or rate-limited (429, 5xx), the planner waits 1s and then 2s and tries again before giving up, and the user sees a friendly "busy, try again" message rather than a status code. Errors that retrying can't fix, such as a bad key, fail immediately. The Anthropic SDK has the same behaviour built in. Tests inject a fake `sleep`, so they run instantly.
 
 **The LLM is behind an interface, so it can be tested without the network.** `create_plan` depends on a `Planner` protocol supplied through FastAPI's dependency injection. Tests swap in a fake planner, and `ClaudePlanner` takes its client as a constructor argument so its response handling can be tested with a fake client. The test suite never calls the real API, so it's fast, free and reliable in CI.
 
@@ -78,11 +92,11 @@ cd smart-journal
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt -r requirements-dev.txt
-cp .env.example .env             # then add your ANTHROPIC_API_KEY
+cp .env.example .env             # then add an LLM key and a SECRET_KEY
 uvicorn app.main:app --reload
 ```
 
-Open http://localhost:8000 for the app and http://localhost:8000/docs for the interactive API docs.
+Create an account, then copy the verification link that's printed in the terminal into your browser. Open http://localhost:8000 for the app and http://localhost:8000/docs for the interactive API docs.
 
 ## Run with Docker
 
@@ -99,12 +113,19 @@ The named volume keeps your entries when the container is replaced.
 pytest -v
 ```
 
-The suite covers entry CRUD, search (including an SQL-injection attempt), validation errors, the planner endpoints with a fake planner, prompt building, and how `ClaudePlanner` handles good, missing and malformed tool calls. GitHub Actions runs the tests and builds the Docker image on every push and pull request.
+The suite covers sign-up, verification, login, expired and forged tokens, privacy between users, entry CRUD, search (including an SQL-injection attempt), validation errors, the planner endpoints with a fake planner, prompt building, and how `ClaudePlanner` handles good, missing and malformed tool calls. GitHub Actions runs the tests and builds the Docker image on every push and pull request.
 
 ## API
 
+Everything under `/api/entries` and `/api/plans` needs an `Authorization: Bearer <token>` header. In `/docs`, log in, then click **Authorize** and paste the token.
+
 | Method | Path | Description |
 |---|---|---|
+| POST | `/api/auth/register` | Create an account and send a verification email |
+| POST | `/api/auth/verify` | Verify an email with the token from the link |
+| POST | `/api/auth/resend-verification` | Send a new verification link |
+| POST | `/api/auth/login` | Log in and get an access token |
+| GET | `/api/auth/me` | The logged-in user |
 | GET | `/api/entries?q=&limit=` | List entries, newest first, with optional search |
 | POST | `/api/entries` | Create an entry |
 | GET | `/api/entries/{id}` | Get one entry |
@@ -112,12 +133,16 @@ The suite covers entry CRUD, search (including an SQL-injection attempt), valida
 | DELETE | `/api/entries/{id}` | Delete an entry |
 | POST | `/api/plans` | Generate and save a plan |
 | GET | `/api/plans` | List recent plans |
+| DELETE | `/api/plans/{id}` | Delete a plan |
+| DELETE | `/api/plans/{id}/days/{day}/tasks/{task}` | Remove one task from a plan (returns the updated plan) |
 | GET | `/api/suggestions/random?exclude=` | A random activity suggestion, skipping the one passed in `exclude` |
 | GET | `/api/health` | Health check |
 
 ## What I'd add next
 
-- User accounts with JWT authentication, so each person only sees their own entries
+- Sending real emails through a provider, and password reset
+- Rate limiting on login and sign-up
+- httpOnly cookies instead of localStorage for the token
 - Alembic migrations instead of `create_all`, and PostgreSQL for production
 - Streaming the plan as it's generated
 - Deployment to Azure Container Apps from the CI pipeline

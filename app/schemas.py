@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 Mood = Literal["great", "good", "okay", "low", "rough"]
 Scope = Literal["week", "weekend"]
@@ -94,3 +94,57 @@ class PlanRead(BaseModel):
     @classmethod
     def timestamp_is_utc(cls, value: datetime) -> datetime:
         return as_utc(value)
+
+
+# ---------- Accounts ----------
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=72)
+
+    @field_validator("password")
+    @classmethod
+    def password_fits_bcrypt(cls, value: str) -> str:
+        # bcrypt only uses the first 72 bytes; reject longer ones rather than silently truncating.
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("Password is too long")
+        if value.strip() != value or not value.strip():
+            raise ValueError("Password can't start or end with spaces")
+        return value
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=200)
+
+
+class VerifyRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=2_000)
+
+
+class ResendRequest(BaseModel):
+    email: EmailStr
+
+
+class UserRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email: str
+    is_verified: bool
+    created_at: datetime
+
+    @field_validator("created_at")
+    @classmethod
+    def timestamp_is_utc(cls, value: datetime) -> datetime:
+        return as_utc(value)
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int  # seconds
+
+
+class MessageResponse(BaseModel):
+    detail: str
