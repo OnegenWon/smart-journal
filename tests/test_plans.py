@@ -259,8 +259,18 @@ from app.services.llm import call_with_retries, friendly_message  # noqa: E402
 
 def gemini_error(code):
     """Build a real google-genai error with the given status code (ClientError for 4xx, ServerError for 5xx)."""
+    # cls = genai_errors.ClientError if code < 500 else genai_errors.ServerError
+    # return cls(code, {"error": {"code": code, "message": "test", "status": "TEST"}})
+  
     cls = genai_errors.ClientError if code < 500 else genai_errors.ServerError
-    return cls(code, {"error": {"code": code, "message": "test", "status": "TEST"}})
+    error = cls.__new__(cls)
+    Exception.__init__(error, f"{code} TEST")
+    error.code = code
+    error.status = "TEST"
+    error.message = "test"
+    error.details = {}
+    error.response = None
+    return error
 
 
 class FlakyModels:
