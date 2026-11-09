@@ -194,3 +194,42 @@ def test_users_cannot_delete_someone_elses_plan(client, other_user, fake_planner
     assert client.delete(f"/api/plans/{plan['id']}/days/0/tasks/0", headers=other_user).status_code == 404
     assert len(client.get("/api/plans").json()) == 1
     assert client.get("/api/plans").json()[0]["content"]["days"][0]["tasks"] == ["Long walk", "Food shop"]
+
+
+
+def test_smtp_sender_sends_a_message(monkeypatch):
+    from app.services import email as email_module
+
+    sent = {}
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout):
+            sent["server"] = (host, port)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def starttls(self):
+            sent["tls"] = True
+
+        def login(self, username, password):
+            sent["login"] = username
+
+        def send_message(self, message):
+            sent["to"] = message["To"]
+            sent["subject"] = message["Subject"]
+
+    monkeypatch.setattr(email_module.smtplib, "SMTP", FakeSMTP)
+    sender = email_module.SmtpEmailSender("smtp.example.org", 587, "me@example.org", "pw", "me@example.org")
+    sender.send("you@example.org", "Hello", "Body")
+
+    assert sent == {
+        "server": ("smtp.example.org", 587),
+        "tls": True,
+        "login": "me@example.org",
+        "to": "you@example.org",
+        "subject": "Hello",
+    }

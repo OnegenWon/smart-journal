@@ -1,10 +1,14 @@
-"""Sending email. In development, emails are printed to the server terminal instead.
+"""Sending email.
 
-Swapping in a real provider (SMTP, SendGrid, Azure Communication Services) means writing
-one more class with a `send` method and returning it from get_email_sender.
+With no SMTP settings, emails are printed to the server log (handy locally, and visible in your
+host's log viewer). Set SMTP_HOST and friends to send real emails, for example through Gmail.
 """
 
+import smtplib
+from email.message import EmailMessage
 from typing import Protocol
+
+from app import config
 
 
 class EmailSender(Protocol):
@@ -19,6 +23,37 @@ class ConsoleEmailSender:
         print(f"\n{divider}\nEMAIL to {to}\nSubject: {subject}\n\n{body}\n{divider}\n", flush=True)
 
 
+class SmtpEmailSender:
+    """Sends real email over SMTP with STARTTLS (e.g. smtp.gmail.com:587 with an app password)."""
+
+    def __init__(self, host: str, port: int, username: str, password: str, sender: str):
+        self.host = host
+        self.port = port
+        self.username = username
+        self.password = password
+        self.sender = sender
+
+    def send(self, to: str, subject: str, body: str) -> None:
+        message = EmailMessage()
+        message["From"] = self.sender
+        message["To"] = to
+        message["Subject"] = subject
+        message.set_content(body)
+        with smtplib.SMTP(self.host, self.port, timeout=20) as smtp:
+            smtp.starttls()
+            if self.username:
+                smtp.login(self.username, self.password)
+            smtp.send_message(message)
+
+
 def get_email_sender() -> EmailSender:
     """FastAPI dependency. Tests override this to capture emails."""
+    if config.SMTP_HOST:
+        return SmtpEmailSender(
+            host=config.SMTP_HOST,
+            port=config.SMTP_PORT,
+            username=config.SMTP_USERNAME,
+            password=config.SMTP_PASSWORD,
+            sender=config.EMAIL_FROM,
+        )
     return ConsoleEmailSender()

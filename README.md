@@ -107,6 +107,15 @@ docker run -p 8000:8000 --env-file .env -v journal-data:/app/data smart-journal
 
 The named volume keeps your entries when the container is replaced.
 
+## Deploy (Render, free tier)
+
+1. On render.com, create a **PostgreSQL** database (Free) and copy its **Internal Database URL**.
+2. Create a **Web Service** from this GitHub repo. Render detects the Dockerfile. Choose the Free instance type.
+3. Add environment variables: `DATABASE_URL` (from step 1), `SECRET_KEY`, `LLM_PROVIDER`, the matching API key and model, and `APP_BASE_URL` set to the service's `https://….onrender.com` address.
+4. Optionally add the `SMTP_*` variables so verification emails are really sent. Without them, the links appear in the service's **Logs** tab.
+
+Free services sleep after 15 minutes without traffic, so the first visit after a break takes up to a minute.
+
 ## Tests
 
 ```bash
