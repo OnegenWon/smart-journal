@@ -161,3 +161,10 @@ Everything under `/api/entries` and `/api/plans` needs an `Authorization: Bearer
 - Streaming the plan as it's generated
 - Deployment to Azure Container Apps from the CI pipeline
 - A Vite build for the frontend once it grows beyond one page
+
+# Smart Journal
+
+A private journaling app with user accounts and an LLM planner.
+
+**Live demo:** https://smart-journal-86hm.onrender.com
+*Hosted on Render's free tier, so the first visit after a quiet spell can take up to a minute to wake up.*
