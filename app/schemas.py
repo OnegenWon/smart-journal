@@ -98,19 +98,38 @@ class PlanRead(BaseModel):
 
 # ---------- Accounts ----------
 
+def check_new_password(value: str) -> str:
+    """Rules for any new password, at sign-up or reset."""
+    # bcrypt only uses the first 72 bytes; reject longer ones rather than silently truncating.
+    if len(value.encode("utf-8")) > 72:
+        raise ValueError("Password is too long")
+    if value.strip() != value or not value.strip():
+        raise ValueError("Password can't start or end with spaces")
+    return value
+
+
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=72)
 
     @field_validator("password")
     @classmethod
-    def password_fits_bcrypt(cls, value: str) -> str:
-        # bcrypt only uses the first 72 bytes; reject longer ones rather than silently truncating.
-        if len(value.encode("utf-8")) > 72:
-            raise ValueError("Password is too long")
-        if value.strip() != value or not value.strip():
-            raise ValueError("Password can't start or end with spaces")
-        return value
+    def password_rules(cls, value: str) -> str:
+        return check_new_password(value)
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=2_000)
+    password: str = Field(min_length=8, max_length=72)
+
+    @field_validator("password")
+    @classmethod
+    def password_rules(cls, value: str) -> str:
+        return check_new_password(value)
 
 
 class LoginRequest(BaseModel):
@@ -148,3 +167,9 @@ class TokenResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     detail: str
+
+
+class PublicSettings(BaseModel):
+    """Settings the frontend needs before anyone logs in."""
+
+    email_delivery: str  # "email" when real emails are sent, "log" when they go to the server log

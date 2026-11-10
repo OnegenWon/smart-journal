@@ -12,10 +12,13 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models import User
 from app.schemas import (
+    ForgotPasswordRequest,
     LoginRequest,
     MessageResponse,
+    PublicSettings,
     RegisterRequest,
     ResendRequest,
+    ResetPasswordRequest,
     TokenResponse,
     UserRead,
     VerifyRequest,
@@ -23,14 +26,17 @@ from app.schemas import (
 from app.security import (
     ACCESS,
     DUMMY_HASH,
+    RESET,
     VERIFY,
     InvalidToken,
     create_token,
     decode_token,
+    decode_token_payload,
     hash_password,
+    password_fingerprint,
     verify_password,
 )
-from app.services.email import EmailSender, get_email_sender
+from app.services.email import EmailSender, email_delivery_mode, get_email_sender
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -125,8 +131,71 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         )
 
     minutes = config.ACCESS_TOKEN_MINUTES
-    token = create_token(user.id, ACCESS, timedelta(minutes=minutes))
+    token = create_token(
+        user.id, ACCESS, timedelta(minutes=minutes), fingerprint=password_fingerprint(user.password_hash)
+    )
     return TokenResponse(access_token=token, expires_in=minutes * 60)
+
+
+# ---------- Forgotten passwords ----------
+
+def send_reset_email(user: User, sender: EmailSender) -> None:
+    token = create_token(
+        user.id,
+        RESET,
+        timedelta(minutes=config.RESET_TOKEN_MINUTES),
+        fingerprint=password_fingerprint(user.password_hash),
+    )
+    link = f"{config.APP_BASE_URL}/?reset={token}"
+    body = (
+        "Someone asked to reset the password for your Smart Journal account.\n\n"
+        f"Open this link to choose a new password (it expires in {config.RESET_TOKEN_MINUTES} minutes "
+        "and works once):\n"
+        f"{link}\n\n"
+        "If this wasn't you, you can ignore this email. Your password won't change."
+    )
+    sender.send(user.email, "Reset your Smart Journal password", body)
+
+
+@router.post("/forgot-password", response_model=MessageResponse, status_code=status.HTTP_202_ACCEPTED)
+def forgot_password(
+    payload: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+    sender: EmailSender = Depends(get_email_sender),
+):
+    user = db.scalar(select(User).where(User.email == normalise_email(payload.email)))
+    if user is not None:
+        send_reset_email(user, sender)
+    # Same answer either way, so this can't be used to find out who has an account.
+    return MessageResponse(detail="If an account exists for that email, we've sent a link to reset the password.")
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    invalid = HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="This reset link is invalid, has expired or has already been used. Request a new one.",
+    )
+    try:
+        claims = decode_token_payload(payload.token, RESET)
+    except InvalidToken:
+        raise invalid from None
+
+    user = db.get(User, claims["user_id"])
+    # The fingerprint no longer matches once the password has changed, so each link works once.
+    if user is None or claims.get("pwd") != password_fingerprint(user.password_hash):
+        raise invalid
+
+    user.password_hash = hash_password(payload.password)
+    # Opening a link sent to the inbox proves the email belongs to them.
+    user.is_verified = True
+    db.commit()
+    return MessageResponse(detail="Your password has been changed. You can log in now.")
+
+
+@router.get("/settings", response_model=PublicSettings)
+def public_settings():
+    return PublicSettings(email_delivery=email_delivery_mode())
 
 
 @router.get("/me", response_model=UserRead)

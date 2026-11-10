@@ -1,5 +1,6 @@
-"""Password hashing and signed tokens (JWT) for login and email verification."""
+"""Password hashing and signed tokens (JWT) for login, email verification and password reset."""
 
+import hashlib
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
@@ -9,13 +10,14 @@ from app import config
 
 ALGORITHM = "HS256"
 
-# Token purposes. A verification token can't be used to log in, and vice versa.
+# Token purposes. A token made for one purpose is rejected everywhere else.
 ACCESS = "access"
 VERIFY = "verify"
+RESET = "reset"
 
 
 class InvalidToken(Exception):
-    """The token is malformed, expired, forged or meant for something else."""
+    """The token is malformed, expired, forged, meant for something else, or no longer current."""
 
 
 def hash_password(password: str) -> str:
@@ -31,14 +33,25 @@ def verify_password(password: str, password_hash: str) -> bool:
 DUMMY_HASH = hash_password("not-a-real-password")
 
 
-def create_token(user_id: int, purpose: str, expires_in: timedelta) -> str:
+def password_fingerprint(password_hash: str) -> str:
+    """A short value that changes whenever the password changes.
+
+    Login and reset tokens carry it, so changing the password makes every older token
+    invalid: a reset link works only once, and resetting logs out every other session.
+    """
+    return hashlib.sha256(password_hash.encode("utf-8")).hexdigest()[:16]
+
+
+def create_token(user_id: int, purpose: str, expires_in: timedelta, fingerprint: str | None = None) -> str:
     now = datetime.now(timezone.utc)
     payload = {"sub": str(user_id), "purpose": purpose, "iat": now, "exp": now + expires_in}
+    if fingerprint is not None:
+        payload["pwd"] = fingerprint
     return jwt.encode(payload, config.SECRET_KEY, algorithm=ALGORITHM)
 
 
-def decode_token(token: str, purpose: str) -> int:
-    """Return the user id in a valid token of the given purpose, or raise InvalidToken."""
+def decode_token_payload(token: str, purpose: str) -> dict:
+    """Return the claims of a valid token of the given purpose, or raise InvalidToken."""
     try:
         payload = jwt.decode(token, config.SECRET_KEY, algorithms=[ALGORITHM])
     except jwt.PyJWTError as exc:
@@ -46,6 +59,12 @@ def decode_token(token: str, purpose: str) -> int:
     if payload.get("purpose") != purpose:
         raise InvalidToken
     try:
-        return int(payload["sub"])
+        payload["user_id"] = int(payload["sub"])
     except (KeyError, ValueError) as exc:
         raise InvalidToken from exc
+    return payload
+
+
+def decode_token(token: str, purpose: str) -> int:
+    """Return the user id in a valid token of the given purpose, or raise InvalidToken."""
+    return decode_token_payload(token, purpose)["user_id"]

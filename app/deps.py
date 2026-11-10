@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import User
-from app.security import ACCESS, InvalidToken, decode_token
+from app.security import ACCESS, InvalidToken, decode_token_payload, password_fingerprint
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -27,11 +27,14 @@ def get_current_user(
     if credentials is None:
         raise _unauthorized("Please log in.")
     try:
-        user_id = decode_token(credentials.credentials, ACCESS)
+        payload = decode_token_payload(credentials.credentials, ACCESS)
     except InvalidToken:
         raise _unauthorized("Your session has expired. Please log in again.") from None
 
-    user = db.get(User, user_id)
+    user = db.get(User, payload["user_id"])
     if user is None or not user.is_verified:
         raise _unauthorized("Please log in.")
+    # Sessions started before the last password change are no longer valid.
+    if payload.get("pwd") != password_fingerprint(user.password_hash):
+        raise _unauthorized("Your password was changed. Please log in again.")
     return user

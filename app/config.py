@@ -35,6 +35,7 @@ DEV_SECRET_KEY = "dev-only-insecure-secret-change-me-in-your-env-file-0123456789
 SECRET_KEY = os.getenv("SECRET_KEY") or DEV_SECRET_KEY
 ACCESS_TOKEN_MINUTES = int(os.getenv("ACCESS_TOKEN_MINUTES", "60"))
 VERIFY_TOKEN_HOURS = int(os.getenv("VERIFY_TOKEN_HOURS", "24"))
+RESET_TOKEN_MINUTES = int(os.getenv("RESET_TOKEN_MINUTES", "30"))
 # Used to build the link in verification emails.
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 

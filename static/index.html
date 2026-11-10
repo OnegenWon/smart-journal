@@ -459,10 +459,47 @@
     <template v-if="authMode === 'check-email'">
       <h2>Check your email</h2>
       <p>We've sent a verification link to <strong>{{ authEmail }}</strong>. Open it to activate your account, then log in.</p>
-      <p class="dev-hint">Running locally? No real email is sent. The link is printed in the terminal where the server is running.</p>
+      <p class="dev-hint" v-if="emailDelivery === 'log'">Emails aren't switched on for this server yet, so the link is in the server log (your terminal locally, or the host's Logs page).</p>
+      <p class="dev-hint" v-else>Can't see it? Check your spam folder.</p>
       <div class="auth-links">
         <button class="btn soft small" :disabled="authBusy" @click="resendVerification">Send a new link</button>
         <button class="btn ghost small" @click="switchAuthMode('login')">Back to log in</button>
+      </div>
+    </template>
+
+    <!-- Forgot password: ask for the email -->
+    <template v-else-if="authMode === 'forgot'">
+      <h2>Reset your password</h2>
+      <p>Enter your account's email and we'll send you a link to choose a new password.</p>
+      <form @submit.prevent="requestReset" novalidate>
+        <label class="field-label" for="forgot-email">Email</label>
+        <input id="forgot-email" class="input" type="email" v-model="authEmail" autocomplete="email" required>
+        <button class="btn full" type="submit" :disabled="authBusy || !authEmail.trim()">
+          {{ authBusy ? 'Please wait…' : 'Send reset link' }}
+        </button>
+      </form>
+      <p class="dev-hint" v-if="resetRequested && emailDelivery === 'log'" style="margin-top: 1rem">
+        Emails aren't switched on for this server yet, so the link is in the server log.
+      </p>
+      <div class="auth-links">
+        <button class="btn ghost small" @click="switchAuthMode('login')">Back to log in</button>
+      </div>
+    </template>
+
+    <!-- Reset password: came from the link in the email -->
+    <template v-else-if="authMode === 'reset'">
+      <h2>Choose a new password</h2>
+      <form @submit.prevent="submitReset" novalidate>
+        <label class="field-label" for="new-password">New password <span class="hint">at least 8 characters</span></label>
+        <input id="new-password" class="input" type="password" v-model="newPassword" autocomplete="new-password" required>
+        <label class="field-label" for="new-password-2">Type it again</label>
+        <input id="new-password-2" class="input" type="password" v-model="newPassword2" autocomplete="new-password" required>
+        <button class="btn full" type="submit" :disabled="authBusy || !newPassword || !newPassword2">
+          {{ authBusy ? 'Please wait…' : 'Save new password' }}
+        </button>
+      </form>
+      <div class="auth-links">
+        <button class="btn ghost small" @click="switchAuthMode('forgot')">Get a new link</button>
       </div>
     </template>
 
@@ -488,8 +525,11 @@
         </button>
       </form>
 
-      <div class="auth-links" v-if="authMode === 'login' && needsVerification">
-        <button class="btn ghost small" :disabled="authBusy" @click="resendVerification">Send a new verification link</button>
+      <div class="auth-links" v-if="authMode === 'login'">
+        <button class="btn ghost small" @click="switchAuthMode('forgot')">Forgot password?</button>
+        <button v-if="needsVerification" class="btn ghost small" :disabled="authBusy" @click="resendVerification">
+          Send a new verification link
+        </button>
       </div>
     </template>
 
@@ -736,6 +776,11 @@
       const authError = ref('');
       const authNotice = ref('');
       const needsVerification = ref(false);
+      const emailDelivery = ref('log');      // 'email' or 'log', from /api/auth/settings
+      const resetToken = ref(null);
+      const resetRequested = ref(false);
+      const newPassword = ref('');
+      const newPassword2 = ref('');
 
       const tab = ref('journal');
       const moods = ['great', 'good', 'okay', 'low', 'rough'];
@@ -922,6 +967,9 @@
         authError.value = '';
         authNotice.value = '';
         needsVerification.value = false;
+        resetRequested.value = false;
+        newPassword.value = '';
+        newPassword2.value = '';
       }
 
       function resetAppState() {
@@ -998,6 +1046,62 @@
         }
       }
 
+      async function requestReset() {
+        authBusy.value = true;
+        authError.value = '';
+        try {
+          const { detail } = await api('/api/auth/forgot-password', {
+            method: 'POST',
+            body: JSON.stringify({ email: authEmail.value.trim() }),
+          });
+          authNotice.value = detail;
+          resetRequested.value = true;
+        } catch (e) {
+          authError.value = e.message;
+        } finally {
+          authBusy.value = false;
+        }
+      }
+
+      async function submitReset() {
+        authError.value = '';
+        if (newPassword.value !== newPassword2.value) {
+          authError.value = "The two passwords don't match.";
+          return;
+        }
+        authBusy.value = true;
+        try {
+          const { detail } = await api('/api/auth/reset-password', {
+            method: 'POST',
+            body: JSON.stringify({ token: resetToken.value, password: newPassword.value }),
+          });
+          resetToken.value = null;
+          switchAuthMode('login');
+          authNotice.value = detail;
+        } catch (e) {
+          authError.value = e.message;
+        } finally {
+          authBusy.value = false;
+        }
+      }
+
+      // Handles the link from the reset email: /?reset=<token>
+      function handleResetLink() {
+        const token = new URLSearchParams(window.location.search).get('reset');
+        if (!token) return false;
+        history.replaceState(null, '', window.location.pathname);  // don't leave the token in the address bar
+        resetToken.value = token;
+        switchAuthMode('reset');
+        return true;
+      }
+
+      async function loadSettings() {
+        try {
+          const settings = await api('/api/auth/settings');
+          emailDelivery.value = settings.email_delivery;
+        } catch { /* keep the default */ }
+      }
+
       // Handles the link from the verification email: /?verify=<token>
       async function handleVerifyLink() {
         const params = new URLSearchParams(window.location.search);
@@ -1017,6 +1121,14 @@
       }
 
       onMounted(async () => {
+        await loadSettings();
+        if (handleResetLink()) {
+          // Someone resetting a password shouldn't be dropped into an old session.
+          authToken = null;
+          writeToken(null);
+          checking.value = false;
+          return;
+        }
         await handleVerifyLink();
         const saved = readToken();
         if (saved) {
@@ -1033,6 +1145,7 @@
       return {
         checking, user, authMode, authEmail, authPassword, authBusy, authError, authNotice, needsVerification,
         switchAuthMode, submitAuth, resendVerification, logout,
+        emailDelivery, resetRequested, newPassword, newPassword2, requestReset, submitReset,
         tab, moods, entries, search, draft, saving, notice, error, canSave,
         scope, ideas, chosenIds, recentEntries, planning, planError, plan, plans, suggestion, suggesting,
         formatDate, formatLongDate, newEntry, selectEntry, saveEntry, deleteEntry, openPlanner, makePlan,

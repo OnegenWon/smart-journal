@@ -57,3 +57,8 @@ def get_email_sender() -> EmailSender:
             sender=config.EMAIL_FROM,
         )
     return ConsoleEmailSender()
+
+
+def email_delivery_mode() -> str:
+    """'email' when real emails are sent, 'log' when they're printed to the server log."""
+    return "email" if config.SMTP_HOST else "log"

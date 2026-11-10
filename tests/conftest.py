@@ -26,10 +26,11 @@ class FakeEmailSender:
     def send(self, to, subject, body):
         self.sent.append({"to": to, "subject": subject, "body": body})
 
-    def last_token(self, to=None):
-        emails = [e for e in self.sent if to is None or e["to"] == to]
-        assert emails, "no email was sent"
-        return re.search(r"verify=([\w.\-]+)", emails[-1]["body"]).group(1)
+    def last_token(self, to=None, kind="verify"):
+        """The token from the most recent email of this kind ("verify" or "reset")."""
+        emails = [e for e in self.sent if (to is None or e["to"] == to) and f"?{kind}=" in e["body"]]
+        assert emails, f"no {kind} email was sent"
+        return re.search(rf"\?{kind}=([\w.\-]+)", emails[-1]["body"]).group(1)
 
 
 @pytest.fixture

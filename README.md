@@ -55,6 +55,8 @@ tests/             pytest suite (no real API calls)
 
 **Accounts and verification.** Passwords are hashed with bcrypt and never stored or returned. Logging in returns a short-lived JWT access token, which the frontend sends as `Authorization: Bearer <token>`. Sign-up sends a verification link containing a separate signed token that expires after 24 hours; each token carries a `purpose`, so a verification token can't be used as a login token or the other way round. Unverified users can't log in.
 
+**Password reset.** "Forgot password?" emails a link with a signed token that expires after 30 minutes. Reset and login tokens carry a fingerprint of the current password hash, so once the password changes, the link stops working (it's single-use) and every existing session is logged out. Asking for a reset always gets the same reply, whether or not the email has an account.
+
 **Privacy between users.** Every entry and plan has a `user_id`, and every query filters by the logged-in user. Asking for someone else's entry returns the same 404 as a missing one, so ids can't be probed. Tests check this for read, update, delete and planning.
 
 **Not leaking who has an account.** A wrong password and an unknown email return the same 401 message, and the unknown-email path still runs a bcrypt check so both take the same time. Resending a verification link always returns the same reply.
@@ -134,6 +136,9 @@ Everything under `/api/entries` and `/api/plans` needs an `Authorization: Bearer
 | POST | `/api/auth/verify` | Verify an email with the token from the link |
 | POST | `/api/auth/resend-verification` | Send a new verification link |
 | POST | `/api/auth/login` | Log in and get an access token |
+| POST | `/api/auth/forgot-password` | Email a password reset link |
+| POST | `/api/auth/reset-password` | Set a new password with the token from the link |
+| GET | `/api/auth/settings` | Whether real emails are sent (used by the sign-in screen) |
 | GET | `/api/auth/me` | The logged-in user |
 | GET | `/api/entries?q=&limit=` | List entries, newest first, with optional search |
 | POST | `/api/entries` | Create an entry |
@@ -149,7 +154,7 @@ Everything under `/api/entries` and `/api/plans` needs an `Authorization: Bearer
 
 ## What I'd add next
 
-- Sending real emails through a provider, and password reset
+- A domain of my own for email, so messages are less likely to land in spam
 - Rate limiting on login and sign-up
 - httpOnly cookies instead of localStorage for the token
 - Alembic migrations instead of `create_all`, and PostgreSQL for production
